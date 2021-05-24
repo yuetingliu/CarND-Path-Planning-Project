@@ -131,7 +131,10 @@ int main() {
            * - if one lane change is possible, change to that lane
            * - if two lane changes are possbile, choose the faster one
            */
+          // flag too_close and trigger lane change if possible
           bool too_close = false;
+          // store space gap value and base braking speed on it
+          float space_gap;
           for (int i=0; i<sensor_fusion.size(); i++) {
             float d = sensor_fusion[i][6];
             // check whether the car is in the same lane
@@ -145,6 +148,7 @@ int main() {
               check_car_s += ((double)prev_size*0.02*check_speed);
               // check whether the car is in front and is too close
               if ((check_car_s > car_s) && (check_car_s-car_s) < 30){
+                space_gap = check_car_s - car_s;
                 // check possible successor states for lane change
                 map<string, int> successor_states = get_successor_states(lane);
                 vector<int> safe_lanes;
@@ -196,16 +200,29 @@ int main() {
           }
 
           if (too_close) {
-            // lower speed gradually
-            ref_vel -= .3;
+            // lower speed based on space gap
+            if (space_gap < 10) {
+              // brake hard
+              ref_vel -= 1.5;
+            } else if (space_gap < 20) {
+              // brake normaly
+              ref_vel -= 1.0;
+            } else {
+              // brake slowly
+            ref_vel -= .6;
+            }
           }
           else if (ref_vel < 30.0) {
-            // gas up quickly
+            // gas up quickly and take accel/jerk into consideration
+            ref_vel += (ref_vel/20.0 + 0.5);
+          }
+          else if (ref_vel < 49){
+            // gas up gradually
             ref_vel += 0.5;
           }
-          else if (ref_vel < 49.50){
-            // gas up gradually
-            ref_vel += .3;
+          else if (ref_vel < 49.5){
+            // gas up slowly to avoid speeding ticket
+            ref_vel += 0.1;
           }
 
 

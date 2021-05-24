@@ -10,10 +10,8 @@ using std::string;
 /**
  * get possible lanes to change
 */
-map<string, int> get_successor_states(int lane);
-
 map<string, int> get_successor_states(int lane){
-  // if left lane, successor states can be Keep Lane or Lane Change Right
+  // only consider lane change here
   map <string, int> states;
   if (lane == 0){
      states["LCR"] = lane + 1;
