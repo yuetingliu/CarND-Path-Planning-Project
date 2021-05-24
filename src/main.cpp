@@ -27,6 +27,7 @@ int main() {
 
   // set some parameters
   int lane = 1;
+  // reference velocity
   double ref_vel = 0;
 
   // Waypoint map to read from
@@ -125,7 +126,7 @@ int main() {
            * go through all vehicles on road from sensor fusion data
            * the logic is the following:
            * - keep lane if possible
-           * - if front car is slow and distance gap is too close, try to change lane
+           * - if front car is slow and distance gap is too small, try to change lane
            * - check whether lane change is possible and how many options
            * - if no lane change is possible, flag too_close and slow down
            * - if one lane change is possible, change to that lane
@@ -138,7 +139,7 @@ int main() {
           for (int i=0; i<sensor_fusion.size(); i++) {
             float d = sensor_fusion[i][6];
             // check whether the car is in the same lane
-            if (d < (2+4*lane+2) && d>(2+4*lane-2)) {
+            if (d < (4*(lane+1)) && d>(4*lane)) {
               double vx = sensor_fusion[i][3];
               double vy = sensor_fusion[i][4];
               double check_speed = sqrt(vx*vx + vy*vy);
@@ -159,7 +160,7 @@ int main() {
                   // check whether it is possible to change to the intended lane
                   for (int i=0; i<sensor_fusion.size(); i++) {
                     float d = sensor_fusion[i][6];
-                    if (d < (2+4*intended_lane+2) && d>(2+4*intended_lane-2)) {
+                    if (d < (4*(intended_lane+1)) && d>(4*intended_lane)) {
                       double vx2 = sensor_fusion[i][3];
                       double vy2 = sensor_fusion[i][4];
                       double check_speed2 = sqrt(vx2*vx2 + vy2*vy2);
@@ -169,7 +170,7 @@ int main() {
                       check_car_s2 += ((double)prev_size*0.02*check_speed2);
                       // check gap if no car between a distance range
                       // (-10, +30) relative to car s, then it is safe
-                      if (((check_car_s2 > car_s) && (check_car_s2-car_s) < 40) ||
+                      if (((check_car_s2 > car_s) && (check_car_s2-car_s) < 30) ||
                           ((check_car_s2 < car_s) && (car_s - check_car_s2) < 10)){
                         safe_to_change = false;
                       }
@@ -228,9 +229,11 @@ int main() {
 
           json msgJson;
 
+          // data points for cars to drive
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
+          // points to fit spline
           vector<double> ptsx;
           vector<double> ptsy;
 
@@ -264,7 +267,6 @@ int main() {
             double ref_x_prev = previous_path_x[prev_size-2];
             double ref_y_prev = previous_path_y[prev_size-2];
 
-            // use two points that make the path tangent to the previous path's end point
             ptsx.push_back(ref_x_prev);
             ptsx.push_back(ref_x);
 
@@ -274,11 +276,11 @@ int main() {
 
           // add three points that are evenly spaced as anchor points
           vector<double> next_wp0 = getXY(
-            car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            car_s+40, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp1 = getXY(
-            car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            car_s+80, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp2 = getXY(
-            car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            car_s+120, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
           // add the three anchor points
           ptsx.push_back(next_wp0[0]);
@@ -290,7 +292,7 @@ int main() {
           ptsy.push_back(next_wp2[1]);
 
           for (int i=0; i<ptsx.size(); i++) {
-            // shift car reference angle to 0 degree
+            // shift car reference angle to 0 degree to avoid vertical line
             double shift_x = ptsx[i] - ref_x;
             double shift_y = ptsy[i] - ref_y;
 
