@@ -203,7 +203,7 @@ int main() {
             // lower speed based on space gap
             if (space_gap < 10) {
               // brake hard
-              ref_vel -= 1.5;
+              ref_vel -= 2.5;
             } else if (space_gap < 20) {
               // brake normaly
               ref_vel -= 1.0;
@@ -214,7 +214,7 @@ int main() {
           }
           else if (ref_vel < 30.0) {
             // gas up quickly and take accel/jerk into consideration
-            ref_vel += (ref_vel/20.0 + 0.5);
+            ref_vel += (ref_vel/25.0 + 0.5);
           }
           else if (ref_vel < 49){
             // gas up gradually
