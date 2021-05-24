@@ -8,6 +8,7 @@
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
+#include "util.h"
 
 // for convenience
 using nlohmann::json;
@@ -93,6 +94,20 @@ int main() {
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
+          // get lane speed
+          map<int, float> lane_speeds;
+          // find a car in the lane and get the speed
+          for (int i=0; i<sensor_fusion.size(); i++) {
+            float d = sensor_fusion[i][6];
+            double vx, vy, vel;
+            vx = sensor_fusion[i][3];
+            vy = sensor_fusion[i][4];
+            vel = sqrt(vx*vx + vy*vy);
+            if ((d == 0) || (d == 1) || (d == 2)){
+              lane_speeds[(int)d] = vel;
+            }
+          }
+
 
           int prev_size = previous_path_x.size();
 
@@ -117,19 +132,61 @@ int main() {
               if ((check_car_s > car_s) && (check_car_s-car_s) < 30){
                 // do some logic here, lower reference speed so we don't crash
                 //ref_vel = 29.5;
-                too_close = true;
-                if (lane > 0) {
-                  lane = 0;
+                // check possible successor states
+                map<string, int> successor_states = get_successor_states(lane);
+                vector<int> safe_lanes;
+                for (map<string, int>::iterator it=successor_states.begin();
+                     it != successor_states.end(); ++it){
+                  int intended_lane = it->second;
+                  bool safe_to_change = true;
+                  // check whether it is possible to change to the intended lane
+                  // no car between a distance range (-10, +30) relative to car s
+                  for (int i=0; i<sensor_fusion.size(); i++) {
+                    float d = sensor_fusion[i][6];
+                    if (d < (2+4*intended_lane+2) && d>(2+4*intended_lane-2)) {
+                      double vx = sensor_fusion[i][3];
+                      double vy = sensor_fusion[i][4];
+                      double check_speed = sqrt(vx*vx + vy*vy);
+                      double check_car_s = sensor_fusion[i][5];
+
+                      // project s using previous path points
+                      check_car_s += ((double)prev_size*0.02*check_speed);
+                      // check s values greater than mine and s gap
+                      if (((check_car_s > car_s) && (check_car_s-car_s) < 30) ||
+                          ((check_car_s < car_s) && (car_s - check_car_s) < 10)){
+                        safe_to_change = false;
+                      }
+                    }
+                  }
+                  if (safe_to_change) {
+                    safe_lanes.push_back(intended_lane);
+                  }
+                }
+                if (safe_lanes.size() == 0) {
+                  // no safe lanes to change, keep lane
+                  too_close = true;
+                } else if (safe_lanes.size() == 1) {
+                  lane = safe_lanes[0];
+                } else if (safe_lanes.size() == 2) {
+                  // both lanes can be changed, choose the faster lane
+                  double lane_speed1, lane_speed2;
+                  lane_speed1 = lane_speeds[safe_lanes[0]];
+                  lane_speed2 = lane_speeds[safe_lanes[1]];
+                  if (lane_speed1 >= lane_speed2) {
+                    lane = safe_lanes[0];
+                  } else {
+                    lane = safe_lanes[1];
+                  }
                 }
               }
             }
           }
 
           if (too_close) {
-            ref_vel -= .224;
+            ref_vel -= .3;
           }
-          else if (ref_vel < 49.5){
-            ref_vel += .224;
+          else if (ref_vel < 49.50){
+            ref_vel += .3;
           }
 
 
