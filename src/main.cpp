@@ -32,7 +32,7 @@ int main() {
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554;
+  // double max_s = 6945.554;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -94,7 +94,9 @@ int main() {
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          // get lane speed
+          // get lane speed for later use
+          // in case of lane change, if more than one lane is safe to change
+          // choose the faster lane
           map<int, float> lane_speeds;
           // find a car in the lane and get the speed
           for (int i=0; i<sensor_fusion.size(); i++) {
@@ -106,20 +108,33 @@ int main() {
             if ((d == 0) || (d == 1) || (d == 2)){
               lane_speeds[(int)d] = vel;
             }
+            // if all three lane speeds are stored, no need to keep iterating
+            if (lane_speeds.size() == 3) {
+              break;
+            }
           }
-
 
           int prev_size = previous_path_x.size();
 
-          // check other cars on the road
+          // use previous path end point for smooth transition
           if (prev_size > 0) {
             car_s = end_path_s;
           }
 
+          /**
+           * go through all vehicles on road from sensor fusion data
+           * the logic is the following:
+           * - keep lane if possible
+           * - if front car is too slow and distance is too close, try to change lane
+           * - check whether lane change is possible and how many options
+           * - if no lane change is possible, flag too_close and slow down
+           * - if one lane change is possible, change to that lane
+           * - if two lane changes are possbile, choose the faster one
+           */
           bool too_close = false;
-          // find ref_v to use
           for (int i=0; i<sensor_fusion.size(); i++) {
             float d = sensor_fusion[i][6];
+            // check whether the car is in the same lane
             if (d < (2+4*lane+2) && d>(2+4*lane-2)) {
               double vx = sensor_fusion[i][3];
               double vy = sensor_fusion[i][4];
@@ -128,11 +143,9 @@ int main() {
 
               // project s using previous path points
               check_car_s += ((double)prev_size*0.02*check_speed);
-              // check s values greater than mine and s gap
+              // check whether the car is in front and is too close
               if ((check_car_s > car_s) && (check_car_s-car_s) < 30){
-                // do some logic here, lower reference speed so we don't crash
-                //ref_vel = 29.5;
-                // check possible successor states
+                // check possible successor states for lane change
                 map<string, int> successor_states = get_successor_states(lane);
                 vector<int> safe_lanes;
                 for (map<string, int>::iterator it=successor_states.begin();
@@ -140,7 +153,6 @@ int main() {
                   int intended_lane = it->second;
                   bool safe_to_change = true;
                   // check whether it is possible to change to the intended lane
-                  // no car between a distance range (-10, +30) relative to car s
                   for (int i=0; i<sensor_fusion.size(); i++) {
                     float d = sensor_fusion[i][6];
                     if (d < (2+4*intended_lane+2) && d>(2+4*intended_lane-2)) {
@@ -151,8 +163,9 @@ int main() {
 
                       // project s using previous path points
                       check_car_s += ((double)prev_size*0.02*check_speed);
-                      // check s values greater than mine and s gap
-                      if (((check_car_s > car_s) && (check_car_s-car_s) < 30) ||
+                      // check gap if no car between a distance range
+                      // (-10, +30) relative to car s, then it is safe
+                      if (((check_car_s > car_s) && (check_car_s-car_s) < 40) ||
                           ((check_car_s < car_s) && (car_s - check_car_s) < 10)){
                         safe_to_change = false;
                       }
@@ -163,7 +176,7 @@ int main() {
                   }
                 }
                 if (safe_lanes.size() == 0) {
-                  // no safe lanes to change, keep lane
+                  // no safe lanes to change, keep lane and slow down
                   too_close = true;
                 } else if (safe_lanes.size() == 1) {
                   lane = safe_lanes[0];
@@ -183,9 +196,15 @@ int main() {
           }
 
           if (too_close) {
+            // lower speed gradually
             ref_vel -= .3;
           }
+          else if (ref_vel < 30.0) {
+            // gas up quickly
+            ref_vel += 0.5;
+          }
           else if (ref_vel < 49.50){
+            // gas up gradually
             ref_vel += .3;
           }
 
@@ -195,27 +214,19 @@ int main() {
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
-          /**
-           * TODO: define a path made up of (x,y) points that the car will visit
-           *   sequentially every .02 seconds
-           */
-
-          /**
-           * create a list of widely spaced (x, y) waypoints, evenly spaced at 30m
-           * later we interoplate these waypoints with a spline and fill it with
-           * more points
-           */
-
           vector<double> ptsx;
           vector<double> ptsy;
 
-          // reference x,y yaw states
+          // calculate path points
+          // set three points with even space and fit spline
+          // interpolate points in the middle to form a list of points
+          // set reference x,y yaw states
           // either reference the starting point or previous path end points
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
 
-          // if the previous size is almost empty, use the car as starting references
+          // if previous points are less than 2, use the car as starting references
           if (prev_size < 2) {
             // use two points that make the path tangent to the car
             double prev_car_x = car_x - cos(car_yaw);
@@ -244,11 +255,15 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          // in Frenet add evenly 30m spaced points ahead of the starting reference
-          vector<double> next_wp0 = getXY(car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          // add three points that are evenly spaced as anchor points
+          vector<double> next_wp0 = getXY(
+            car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp1 = getXY(
+            car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp2 = getXY(
+            car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
+          // add the three anchor points
           ptsx.push_back(next_wp0[0]);
           ptsx.push_back(next_wp1[0]);
           ptsx.push_back(next_wp2[0]);
@@ -269,7 +284,7 @@ int main() {
           // create a spline
           tk::spline s;
 
-          // set (x,y) points to the spline
+          // fit spline with all five points
           s.set_points(ptsx, ptsy);
 
           // start with all of the previous path points from last time
@@ -278,20 +293,18 @@ int main() {
             next_y_vals.push_back(previous_path_y[i]);
           }
 
-          // calculate how to break up spline points so that we travel at our desired reference velocity
+          // set a distance and interpolate points in between
           double target_x = 30.0;
           double target_y = s(target_x);
           double target_dist = sqrt((target_x*target_x) + (target_y*target_y));
 
-          double x_add_on = 0;
 
-          // fill up the rest of pur path planner after filling it with previous pooints, here will will always ooutput 50 points
+          // set total to 50 points
+          // here only interpolate the rest points
           for (int i=0; i<=50-previous_path_x.size(); i++) {
             double N = (target_dist)/(0.02*ref_vel/2.24);
-            double x_point = x_add_on + (target_x)/N;
+            double x_point = (i+1)*(target_x)/N;
             double y_point = s(x_point);
-
-            x_add_on = x_point;
 
             double x_ref = x_point;
             double y_ref = y_point;
@@ -306,21 +319,6 @@ int main() {
             next_x_vals.push_back(x_point);
             next_y_vals.push_back(y_point);
           }
-
-          /**
-          double dist_inc = 0.3;
-          for (int i = 0; i < 50; i++) {
-            double next_s = car_s + (i+1) * dist_inc;
-            double next_d = 6;
-            vector<double> xy = getXY(
-              next_s, next_d, map_waypoints_s,
-              map_waypoints_x, map_waypoints_y
-            );
-            next_x_vals.push_back(xy[0]);
-            next_y_vals.push_back(xy[1]);
-          }
-          */
-
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
