@@ -94,7 +94,7 @@ int main() {
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          // get lane speed for later use
+          // get lane speed for later reference
           // in case of lane change, if more than one lane is safe to change
           // choose the faster lane
           map<int, float> lane_speeds;
@@ -125,7 +125,7 @@ int main() {
            * go through all vehicles on road from sensor fusion data
            * the logic is the following:
            * - keep lane if possible
-           * - if front car is too slow and distance is too close, try to change lane
+           * - if front car is slow and distance gap is too close, try to change lane
            * - check whether lane change is possible and how many options
            * - if no lane change is possible, flag too_close and slow down
            * - if one lane change is possible, change to that lane
@@ -160,17 +160,17 @@ int main() {
                   for (int i=0; i<sensor_fusion.size(); i++) {
                     float d = sensor_fusion[i][6];
                     if (d < (2+4*intended_lane+2) && d>(2+4*intended_lane-2)) {
-                      double vx = sensor_fusion[i][3];
-                      double vy = sensor_fusion[i][4];
-                      double check_speed = sqrt(vx*vx + vy*vy);
-                      double check_car_s = sensor_fusion[i][5];
+                      double vx2 = sensor_fusion[i][3];
+                      double vy2 = sensor_fusion[i][4];
+                      double check_speed2 = sqrt(vx2*vx2 + vy2*vy2);
+                      double check_car_s2 = sensor_fusion[i][5];
 
                       // project s using previous path points
-                      check_car_s += ((double)prev_size*0.02*check_speed);
+                      check_car_s2 += ((double)prev_size*0.02*check_speed2);
                       // check gap if no car between a distance range
                       // (-10, +30) relative to car s, then it is safe
-                      if (((check_car_s > car_s) && (check_car_s-car_s) < 40) ||
-                          ((check_car_s < car_s) && (car_s - check_car_s) < 10)){
+                      if (((check_car_s2 > car_s) && (check_car_s2-car_s) < 40) ||
+                          ((check_car_s2 < car_s) && (car_s - check_car_s2) < 10)){
                         safe_to_change = false;
                       }
                     }
