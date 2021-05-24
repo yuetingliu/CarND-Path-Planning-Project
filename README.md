@@ -65,6 +65,27 @@ the path has processed since last time.
 
 2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
 
+3. Reflection on submitted version
+ Path generation is challenging and fun. The main tools I used in this submitted version are:
+  - sensor_fusion data
+  - Frenet coordinate
+  - coordinate shift and rotation, related to Spline
+  - spine fitting
+4. The main steps are:
+  - go through all vehicles on the road from sensor fusion data
+  - keep lane if possible, meaning no car is too close and our car is at high speed (just below speed limit)
+  - if front car is slow and the distance gap is too small, attempt to change lane
+  - if no lane change is possible, then slow down (brake hard if very close)
+  - if one lane change is possible, then change to that lane
+  - if two lane changes are possible, then choose the faster lane
+  - use spline to generate lane path such the the path is smooth and comfortable for passagers if there are
+  - when fitting spline, get two previous points to make the transition smooth, set extra points that are evenly spreaded, fit spline, and interapolate points in between.
+5. Possible improvements:
+  - in case of no lane change is possible but front car is too slow, try to slow down and create opportunities. But make sure it is safe for cars behind
+  - probably prefer the middle lane such, lane changing has more potential options
+  - tweak parameters such as how many points to use to fit spline, when to do the lane change, how to get the highest possible speed while maintaining comfort
+ Overall, this is a very challenging project and really fun to watch the car drive when complete
+
 ## Tips
 
 A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
