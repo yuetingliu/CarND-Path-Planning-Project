@@ -71,6 +71,7 @@ the path has processed since last time.
   - Frenet coordinate
   - coordinate shift and rotation, related to Spline
   - spine fitting
+
 4. The main steps are:
   - go through all vehicles on the road from sensor fusion data
   - keep lane if possible, meaning no car is too close and our car is at high speed (just below speed limit)
@@ -80,7 +81,10 @@ the path has processed since last time.
   - if two lane changes are possible, then choose the faster lane
   - use spline to generate lane path such the the path is smooth and comfortable for passagers if there are
   - when fitting spline, get two previous points to make the transition smooth, set extra points that are evenly spreaded, fit spline, and interapolate points in between.
-5. Possible improvements:
+
+5. Speed control consists of two parts. Part 1 is slowing down when the distance from the front car is too small. Brake harder when the gap gets smaller. The other is speeding up whenever possible. To avoid big acce/jerk, set the initial acce dependent on the current speed. When the speed is built up to 30 mhp, gas up with a contant acce and when the speed is close to the upper limit, speed up slowly to avoid surpassing the limit. The code is lines: 195-219
+
+6. Possible improvements:
   - in case of no lane change is possible but front car is too slow, try to slow down and create opportunities. But make sure it is safe for cars behind
   - probably prefer the middle lane such, lane changing has more potential options
   - tweak parameters such as how many points to use to fit spline, when to do the lane change, how to get the highest possible speed while maintaining comfort
