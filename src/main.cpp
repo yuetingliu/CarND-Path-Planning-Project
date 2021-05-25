@@ -98,21 +98,10 @@ int main() {
           // get lane speed for later reference
           // in case of lane change, if more than one lane is safe to change
           // choose the faster lane
+          // in this case, all lane speed limits are 50 mph
           map<int, float> lane_speeds;
-          // find a car in the lane and get the speed
-          for (int i=0; i<sensor_fusion.size(); i++) {
-            float d = sensor_fusion[i][6];
-            double vx, vy, vel;
-            vx = sensor_fusion[i][3];
-            vy = sensor_fusion[i][4];
-            vel = sqrt(vx*vx + vy*vy);
-            if ((d == 0) || (d == 1) || (d == 2)){
-              lane_speeds[(int)d] = vel;
-            }
-            // if all three lane speeds are stored, no need to keep iterating
-            if (lane_speeds.size() == 3) {
-              break;
-            }
+          for (int d=0; d<3; d++) {
+            lane_speeds[d] = 50;
           }
 
           int prev_size = previous_path_x.size();
@@ -169,8 +158,11 @@ int main() {
                       // project s using previous path points
                       check_car_s2 += ((double)prev_size*0.02*check_speed2);
                       // check gap if no car between a distance range
-                      // (-10, +30) relative to car s, then it is safe
-                      if (((check_car_s2 > car_s) && (check_car_s2-car_s) < 30) ||
+                      // (-10, +40) relative to car s, then it is safe
+                      // if the distance parameter is 30, then there is a chance
+                      // that the car make two continuous lane change, which
+                      // is not supposed to happen
+                      if (((check_car_s2 > car_s) && (check_car_s2-car_s) < 40) ||
                           ((check_car_s2 < car_s) && (car_s - check_car_s2) < 10)){
                         safe_to_change = false;
                       }
@@ -204,21 +196,21 @@ int main() {
             // lower speed based on space gap
             if (space_gap < 10) {
               // brake hard
-              ref_vel -= 2.5;
+              ref_vel -= 1.0;
             } else if (space_gap < 20) {
               // brake normaly
-              ref_vel -= 1.0;
+              ref_vel -= 0.5;
             } else {
               // brake slowly
-            ref_vel -= .6;
+            ref_vel -= .25;
             }
           }
           else if (ref_vel < 30.0) {
-            // gas up quickly and take accel/jerk into consideration
-            ref_vel += (ref_vel/25.0 + 0.5);
+            // gas up gradually such that accel/jerk won't be too big
+            ref_vel += (ref_vel/120 + 0.25);
           }
           else if (ref_vel < 49){
-            // gas up gradually
+            // gas up constantly up tp 49 mph
             ref_vel += 0.5;
           }
           else if (ref_vel < 49.5){
